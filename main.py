@@ -5,19 +5,21 @@ from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="LLM中转服务")
 # vLLM地址
-VLLM_URL = "http://127.0.0.1:8000"
+# VLLM_URL = "http://127.0.0.1:8000"
+VLLM_URL = "https://tvxzgqb7gpbph2-8000.proxy.runpod.net/v1/chat/completions"
+LLM_API_KEY = "sk-tvxzgqb7gpbph2"
 
-# 前端传参结构体，所有自定义推理参数在这里定义
+
 class ChatReq(BaseModel):
     id: str
     # openai compatible parameters
     # https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
-    model: str = 'qwen-8b'
+    model: str = 'Qwen/Qwen3-8B'
     messages: list
-    temperature: float = 0.7 
-    stream: bool = True
+    temperature: float = 0.7
+    stream: bool = False
 
-    # vllm extra parameters for sampling 
+    # vllm extra parameters for sampling
     # https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/#internal-data-structures
     use_beam_search: bool = False
     top_k: int | None = None
@@ -42,6 +44,7 @@ class ChatReq(BaseModel):
     allowed_token_ids: list[int] | None = None
     prompt_logprobs: int | None = None
 
+
 @app.post("/v1/chat/completions")
 async def chat(req: ChatReq):
     # 1. 前端参数校验（限制范围，防止非法值）
@@ -56,10 +59,18 @@ async def chat(req: ChatReq):
         "stream": req.stream
     }
 
+    headers = {
+        "Authorization": f"Bearer {LLM_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    print(payload)
+    print(headers)
+
     # 3. 异步转发流式
     async def stream_generator():
         async with httpx.AsyncClient(timeout=300) as client:
-            async with client.stream("POST", VLLM_URL, json=payload) as resp:
+            async with client.stream("POST", VLLM_URL, json=payload, headers=headers) as resp:
                 async for chunk in resp.aiter_bytes():
                     yield chunk
 
@@ -67,9 +78,13 @@ async def chat(req: ChatReq):
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
     else:
         async with httpx.AsyncClient(timeout=300) as client:
-            r = await client.post(VLLM_URL, json=payload)
+            r = await client.post(VLLM_URL, json=payload, headers=headers)
             return r.json()
+
+@app.get("/")
+def root():
+    return {"msg": "FastAPI service running"}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=9000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)

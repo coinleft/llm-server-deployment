@@ -9,7 +9,7 @@ import uvicorn
 # 加载环境变量
 load_dotenv()
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-BASE_URL = "https://api.deepseek.com/v1"
+BASE_URL = "https://tvxzgqb7gpbph2-8000.proxy.runpod.net/v1"
 
 # 同步、异步双客户端
 sync_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
@@ -19,24 +19,25 @@ async_client = AsyncOpenAI(
     base_url=BASE_URL
 )
 
-app = FastAPI(title="DeepSeek API Service")
+app = FastAPI(title="API Service")
 
 # 请求体模型
 class ChatRequest(BaseModel):
     prompt: str
-    model: str = "deepseek-v4-flash"
+    model: str = "Qwen/Qwen3-8B"
 
 
 # 1. 同步接口：一次性返回完整回答，非流式
 @app.post("/chat")
 def chat_sync(req: ChatRequest):
+    print(req)
     """同步对话接口，等待全部生成完成后一次性返回文本"""
     resp = sync_client.chat.completions.create(
         # openai compatible parameters
         # https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
         model=req.model,
         messages=[{"role": "user", "content": req.prompt}],
-        stream=False,
+        stream=True,
         # extra_body={"top_k": req.top_k}
 
         # vLLM supports some parameters that are not supported by OpenAI, top_k for example. 
@@ -83,8 +84,10 @@ async def stream_generator(prompt: str, model: str):
         stream=True
     )
     async for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+        # 正确取值：先判断 choices 是否存在且不为空
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
 
 @app.post("/chat/stream")
@@ -97,9 +100,9 @@ async def chat_stream(req: ChatRequest):
 # 测试用根路由
 @app.get("/")
 def root():
-    return {"msg": "DeepSeek FastAPI service running",
+    return {"msg": "FastAPI service running",
             "endpoints": ["/chat", "/chat/stream"]}
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
