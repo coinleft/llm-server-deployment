@@ -15,13 +15,15 @@ BASE_URL = "https://tvxzgqb7gpbph2-8000.proxy.runpod.net/v1"
 sync_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
 
 async_client = AsyncOpenAI(
-    api_key=DEEPSEEK_API_KEY, 
+    api_key=DEEPSEEK_API_KEY,
     base_url=BASE_URL
 )
 
 app = FastAPI(title="API Service")
 
 # 请求体模型
+
+
 class ChatRequest(BaseModel):
     prompt: str
     model: str = "Qwen/Qwen3-8B"
@@ -40,9 +42,9 @@ def chat_sync(req: ChatRequest):
         stream=True,
         # extra_body={"top_k": req.top_k}
 
-        # vLLM supports some parameters that are not supported by OpenAI, top_k for example. 
+        # vLLM supports some parameters that are not supported by OpenAI, top_k for example.
         # You can pass these parameters to vLLM using the OpenAI client in the extra_body parameter of your requests, i.e. extra_body={"top_k": 50} for top_k.
-        
+
         # https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/#internal-data-structures
         # use_beam_search: bool = False
         # top_k: int | None = None
@@ -83,18 +85,18 @@ async def stream_generator(prompt: str, model: str):
         messages=[{"role": "user", "content": prompt}],
         stream=True
     )
+
+    # 正确取值：先判断 choices 是否存在且不为空
     async for chunk in stream:
-        # 正确取值：先判断 choices 是否存在且不为空
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
     """异步流式对话接口，SSE 实时返回分段内容"""
     generator = stream_generator(req.prompt, req.model)
-    return StreamingResponse(generator, media_type="text/plain")
+    return StreamingResponse(generator, media_type="text/event-stream")
 
 
 # 测试用根路由
